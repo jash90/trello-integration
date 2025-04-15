@@ -1,13 +1,14 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ListPlus, Loader2, Users, PencilLine, FileJson, Sparkles } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { LogoutButton } from '../components/LogoutButton';
 import { getBoards, getLists, getBoardMembers, BASE_URL } from '../lib/trello';
 import { generateTaskDescription } from '../lib/openai';
 import { ModelSelector } from '../components/ModelSelector';
-import { supabase } from '../lib/supabase';
 import type { TrelloBoard, TrelloList, TrelloMember, TrelloCard } from '../types/trello';
-import type { UserSettings } from '../lib/supabase';
+
+// Read keys from environment variables
+const trelloKey = import.meta.env.VITE_TRELLO_KEY;
+const trelloToken = import.meta.env.VITE_TRELLO_TOKEN;
+const openaiKey = import.meta.env.VITE_OPENAI_KEY;
 
 interface Task {
   name: string;
@@ -40,7 +41,7 @@ function parseTasksFromText(text: string): Task[] {
 export function Dashboard() {
   const [boards, setBoards] = useState<TrelloBoard[]>([]);
   const [lists, setLists] = useState<TrelloList[]>([]);
-  const [settings, setSettings] = useState<Partial<UserSettings>>({});
+  // const [settings, setSettings] = useState<Partial<UserSettings>>({}); // Removed settings state
   const [members, setMembers] = useState<TrelloMember[]>([]);
   const [selectedBoard, setSelectedBoard] = useState<string>('');
   const [selectedList, setSelectedList] = useState<string>('');
@@ -68,41 +69,29 @@ export function Dashboard() {
   const [exportedJson, setExportedJson] = useState<string>('');
   const [loadingExport, setLoadingExport] = useState(false);
 
-  const loadSettings = useCallback(async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No user found');
-
-      const { data, error } = await supabase
-        .from('user_settings')
-        .select('*')
-        .eq('user_id', user.id)
-        .single();
-
-      if (error) throw error;
-      if (data) setSettings(data);
-    } catch (error) {
-      console.error('Failed to load settings:', error);
-      toast.error('Failed to load API settings');
-    }
-  }, []);
-
   const loadBoards = async () => {
-    if (!settings.trello_key || !settings.trello_token) return;
+    // if (!settings.trello_key || !settings.trello_token) return;
+    if (!trelloKey || !trelloToken) {
+      setError('Trello API Key or Token not configured in environment variables.');
+      return;
+    }
 
     try {
-      const boardData = await getBoards(settings.trello_key, settings.trello_token);
+      // const boardData = await getBoards(settings.trello_key, settings.trello_token);
+      const boardData = await getBoards(trelloKey, trelloToken);
       setBoards(boardData);
       setError('');
     } catch (err) {
-      setError('Failed to load boards. Please check your API credentials.');
+      setError('Failed to load boards. Please check your Trello API credentials in environment variables.');
       setBoards([]);
     }
   };
 
   async function loadLists(boardId: string) {
+    if (!trelloKey || !trelloToken) return; // Added check
     try {
-      const listData = await getLists(boardId, settings.trello_key!, settings.trello_token!);
+      // const listData = await getLists(boardId, settings.trello_key!, settings.trello_token!);
+      const listData = await getLists(boardId, trelloKey, trelloToken);
       setLists(listData);
     } catch (err) {
       setError('Failed to load lists.');
@@ -110,8 +99,10 @@ export function Dashboard() {
   }
 
   async function loadMembers(boardId: string) {
+    if (!trelloKey || !trelloToken) return; // Added check
     try {
-      const memberData = await getBoardMembers(boardId, settings.trello_key!, settings.trello_token!);
+      // const memberData = await getBoardMembers(boardId, settings.trello_key!, settings.trello_token!);
+      const memberData = await getBoardMembers(boardId, trelloKey, trelloToken);
       setMembers(memberData);
     } catch (err) {
       setError('Failed to load board members.');
@@ -120,7 +111,7 @@ export function Dashboard() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedList || !taskText.trim()) return;
+    if (!selectedList || !taskText.trim() || !trelloKey || !trelloToken) return; // Added key checks
 
     setIsLoading(true);
     setError('');
@@ -151,7 +142,7 @@ export function Dashboard() {
             index === i ? { ...task, status: 'creating' } : task
           ));
           
-          const response = await fetch(`${BASE_URL}/cards?key=${settings.trello_key}&token=${settings.trello_token}`, {
+          const response = await fetch(`${BASE_URL}/cards?key=${trelloKey}&token=${trelloToken}`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -199,10 +190,12 @@ export function Dashboard() {
   }
 
   async function loadCards(listId: string) {
-    if (!settings.trello_key || !settings.trello_token) return;
+    // if (!settings.trello_key || !settings.trello_token) return;
+    if (!trelloKey || !trelloToken) return; // Added check
     try {
       const response = await fetch(
-        `${BASE_URL}/lists/${listId}/cards?key=${settings.trello_key}&token=${settings.trello_token}`
+        // `${BASE_URL}/lists/${listId}/cards?key=${settings.trello_key}&token=${settings.trello_token}`
+        `${BASE_URL}/lists/${listId}/cards?key=${trelloKey}&token=${trelloToken}`
       );
       const data = await response.json();
       setCards(data);
@@ -212,7 +205,8 @@ export function Dashboard() {
   }
 
   async function handleBulkAssign() {
-    if (!selectedMember || selectedCards.size === 0) return;
+    // if (!selectedMember || selectedCards.size === 0) return;
+    if (!selectedMember || selectedCards.size === 0 || !trelloKey || !trelloToken) return; // Added key checks
     
     setUpdatingCards(true);
     setError('');
@@ -220,7 +214,8 @@ export function Dashboard() {
     
     try {
       const updatePromises = Array.from(selectedCards).map(async (cardId) => {
-        const response = await fetch(`${BASE_URL}/cards/${cardId}?key=${settings.trello_key}&token=${settings.trello_token}`, {
+        // const response = await fetch(`${BASE_URL}/cards/${cardId}?key=${settings.trello_key}&token=${settings.trello_token}`, {
+        const response = await fetch(`${BASE_URL}/cards/${cardId}?key=${trelloKey}&token=${trelloToken}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -251,17 +246,19 @@ export function Dashboard() {
   }
 
   useEffect(() => {
-    loadSettings();
-  }, [loadSettings]);
+    // loadSettings(); // Removed loadSettings call
+    loadBoards(); // Load boards on initial mount
+  // }, [loadSettings]);
+  }, []); // Changed dependency array
 
   // Save selected model when it changes
   useEffect(() => {
     localStorage.setItem('selectedModel', selectedModel);
   }, [selectedModel]);
 
-  useEffect(() => {
-    loadBoards();
-  }, [settings.trello_key, settings.trello_token]);
+  // useEffect(() => { // This effect is now redundant due to initial load
+  //   loadBoards();
+  // }, [settings.trello_key, settings.trello_token]);
 
   useEffect(() => {
     if (selectedBoard) {
@@ -279,14 +276,16 @@ export function Dashboard() {
   }, [selectedList, activeTab]);
 
   const exportCards = async () => {
-    if (!selectedList || !settings.trello_key || !settings.trello_token) return;
+    // if (!selectedList || !settings.trello_key || !settings.trello_token) return;
+    if (!selectedList || !trelloKey || !trelloToken) return; // Added key checks
     
     setLoadingExport(true);
     setError('');
     
     try {
       const response = await fetch(
-        `${BASE_URL}/lists/${selectedList}/cards?key=${settings.trello_key}&token=${settings.trello_token}`
+        // `${BASE_URL}/lists/${selectedList}/cards?key=${settings.trello_key}&token=${settings.trello_token}`
+        `${BASE_URL}/lists/${selectedList}/cards?key=${trelloKey}&token=${trelloToken}`
       );
       
       if (!response.ok) {
@@ -319,7 +318,8 @@ export function Dashboard() {
               Trello Task Creator
             </h1>
           </div>
-          <div className="flex items-center gap-2">
+          {/* Removed Settings link and LogoutButton */}
+          {/* <div className="flex items-center gap-2">
             <Link
               to="/settings"
               className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
@@ -327,20 +327,23 @@ export function Dashboard() {
               Settings
             </Link>
             <LogoutButton />
-          </div>
+          </div> */}
         </div>
 
         <div className="bg-white rounded-lg shadow-sm p-6 space-y-6">
-          {(!settings.trello_key || !settings.trello_token || !settings.openai_key) && (
+          {/* Updated warning message */}
+          {/* {(!settings.trello_key || !settings.trello_token || !settings.openai_key) && ( */}
+          {(!trelloKey || !trelloToken || !openaiKey) && (
             <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
               <div className="flex">
                 <div className="ml-3">
                   <p className="text-sm text-yellow-700">
-                    Please configure your API keys in the{' '}
+                    {/* Please configure your API keys in the{' '}
                     <Link to="/settings" className="font-medium underline">
                       settings
                     </Link>{' '}
-                    before using the application.
+                    before using the application. */}
+                    Please ensure VITE_TRELLO_KEY, VITE_TRELLO_TOKEN, and VITE_OPENAI_KEY are set in your .env file.
                   </p>
                 </div>
               </div>
@@ -479,7 +482,8 @@ export function Dashboard() {
                     onChange={(e) => setPrompt(e.target.value)}
                     className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                     placeholder="Describe the task you want to create..."
-                    disabled={!settings.openai_key}
+                    // disabled={!settings.openai_key}
+                    disabled={!openaiKey} // Use env var
                   />
                   <input
                     type="number"
@@ -489,15 +493,22 @@ export function Dashboard() {
                     placeholder="Count"
                     min="1"
                     max="100"
-                    disabled={!settings.openai_key}
+                    // disabled={!settings.openai_key}
+                    disabled={!openaiKey} // Use env var
                   />
                   <button
                     type="button"
                     onClick={async () => {
                       setIsGenerating(true);
                       setError('');
+                      if (!openaiKey) { // Check key before calling
+                        setError('OpenAI API Key not configured.');
+                        setIsGenerating(false);
+                        return;
+                      }
                       try {
-                        const result = await generateTaskDescription(prompt, taskCount, settings.openai_key);
+                        // const result = await generateTaskDescription(prompt, taskCount, settings.openai_key);
+                        const result = await generateTaskDescription(prompt, taskCount, openaiKey); // Use env var
                         setTaskText(result);
                       } catch (err) {
                         setError(err instanceof Error ? err.message : 'Failed to generate task');
@@ -505,7 +516,8 @@ export function Dashboard() {
                         setIsGenerating(false);
                       }
                     }}
-                    disabled={!prompt || !settings.openai_key || isGenerating}
+                    // disabled={!prompt || !settings.openai_key || isGenerating}
+                    disabled={!prompt || !openaiKey || isGenerating} // Use env var
                     className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
                   >
                     {isGenerating ? (
