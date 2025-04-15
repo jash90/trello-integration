@@ -472,7 +472,7 @@ export function Dashboard() {
                           id="prompt"
                           value={prompt}
                           onChange={(e) => setPrompt(e.target.value)}
-                          className="focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                          className="focus:ring-blue-500 focus:border-blue-500 block w-full h-full sm:text-sm border-gray-300 rounded-md"
                           placeholder="Describe the task you want to create..."
                           disabled={!openaiKey}
                         />
