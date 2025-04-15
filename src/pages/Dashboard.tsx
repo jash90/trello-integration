@@ -4,6 +4,7 @@ import { getBoards, getLists, getBoardMembers, BASE_URL } from '../lib/trello';
 import { generateTaskDescription } from '../lib/openai';
 import { ModelSelector } from '../components/ModelSelector';
 import type { TrelloBoard, TrelloList, TrelloMember, TrelloCard } from '../types/trello';
+import toast from 'react-hot-toast';
 
 // Read keys from environment variables
 const trelloKey = import.meta.env.VITE_TRELLO_KEY;
@@ -70,48 +71,49 @@ export function Dashboard() {
   const [loadingExport, setLoadingExport] = useState(false);
 
   const loadBoards = async () => {
-    // if (!settings.trello_key || !settings.trello_token) return;
     if (!trelloKey || !trelloToken) {
       setError('Trello API Key or Token not configured in environment variables.');
+      toast.error('Trello API credentials missing');
       return;
     }
 
     try {
-      // const boardData = await getBoards(settings.trello_key, settings.trello_token);
       const boardData = await getBoards(trelloKey, trelloToken);
       setBoards(boardData);
       setError('');
-    } catch (err) {
+    } catch (error) {
+      console.error('Board loading error:', error);
       setError('Failed to load boards. Please check your Trello API credentials in environment variables.');
+      toast.error('Failed to load Trello boards');
       setBoards([]);
     }
   };
 
   async function loadLists(boardId: string) {
-    if (!trelloKey || !trelloToken) return; // Added check
+    if (!trelloKey || !trelloToken) return;
     try {
-      // const listData = await getLists(boardId, settings.trello_key!, settings.trello_token!);
       const listData = await getLists(boardId, trelloKey, trelloToken);
       setLists(listData);
-    } catch (err) {
+    } catch (error) {
+      console.error('List loading error:', error);
       setError('Failed to load lists.');
     }
   }
 
   async function loadMembers(boardId: string) {
-    if (!trelloKey || !trelloToken) return; // Added check
+    if (!trelloKey || !trelloToken) return;
     try {
-      // const memberData = await getBoardMembers(boardId, settings.trello_key!, settings.trello_token!);
       const memberData = await getBoardMembers(boardId, trelloKey, trelloToken);
       setMembers(memberData);
-    } catch (err) {
+    } catch (error) {
+      console.error('Member loading error:', error);
       setError('Failed to load board members.');
     }
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedList || !taskText.trim() || !trelloKey || !trelloToken) return; // Added key checks
+    if (!selectedList || !taskText.trim() || !trelloKey || !trelloToken) return;
 
     setIsLoading(true);
     setError('');
@@ -180,26 +182,27 @@ export function Dashboard() {
       }
       
       setSuccess(`Successfully added ${validTasks.length} tasks to Trello!`);
+      toast.success(`Added ${validTasks.length} tasks`);
       setTaskText('');
-      setTimeout(() => setCreatingTasks([]), 3000); // Clear task status after 3 seconds
+      setTimeout(() => setCreatingTasks([]), 3000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create tasks. Please try again.');
+      toast.error('Failed to create tasks');
     } finally {
       setIsLoading(false);
     }
   }
 
   async function loadCards(listId: string) {
-    // if (!settings.trello_key || !settings.trello_token) return;
-    if (!trelloKey || !trelloToken) return; // Added check
+    if (!trelloKey || !trelloToken) return;
     try {
       const response = await fetch(
-        // `${BASE_URL}/lists/${listId}/cards?key=${settings.trello_key}&token=${settings.trello_token}`
         `${BASE_URL}/lists/${listId}/cards?key=${trelloKey}&token=${trelloToken}`
       );
       const data = await response.json();
       setCards(data);
-    } catch (err) {
+    } catch (error) {
+      console.error('Card loading error:', error);
       setError('Failed to load cards.');
     }
   }
